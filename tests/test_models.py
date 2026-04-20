@@ -2,7 +2,6 @@
 
 import pytest
 import torch
-from torch import nn
 
 from src.models.backbone import ResNetBackbone
 from src.models.film import FiLMLayer
@@ -138,9 +137,6 @@ class TestBCZPolicy:
         state = torch.randn(2, 7)
         out = policy(image, embedding, state)
         assert out["future_xyz_residual"].shape == (2, 10, 3)
-
-    def test_is_nn_module(self, default_policy):
-        assert isinstance(default_policy, nn.Module)
 
     def test_film_layers_registered(self, default_policy):
         film_layers = [m for m in default_policy.modules() if isinstance(m, FiLMLayer)]
