@@ -1,0 +1,36 @@
+# Default BC-Z training config — paper hyperparameters (Appendix D).
+# Override any field via --config <your.yaml> or by editing a copy.
+
+seed: 0
+
+data:
+  # Directory (train-* / val-* naming) or single .tfrecord file.
+  train_path: data
+  val_path: null
+  image_size: [100, 100]
+  num_waypoints: 10
+  max_train_samples: null   # cap for debugging; null = use all
+  max_val_samples: null
+
+model:
+  backbone: resnet18
+  pretrained: true
+  embedding_dim: 512
+  state_dim: 7
+  hidden_dim: 256
+
+training:
+  batch_size: 32
+  num_workers: 4
+  num_epochs: 10
+  lr: 2.5e-4                 # BC-Z Appendix D
+  embedding_noise_std: 0.1   # BC-Z Appendix D
+  device: cpu
+  loss_weights:              # BC-Z Appendix D
+    xyz: 100.0
+    axis_angle: 10.0
+    gripper: 0.5
+
+trackio:
+  project: bc-z
+  run_name: null             # null = trackio auto-name

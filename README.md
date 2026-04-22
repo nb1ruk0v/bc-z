@@ -2,7 +2,7 @@
 
 Обучающий проект для улучшения навыков Claude Code и реализации BC-Z (Behavioral Cloning with Zero-shot task generalization) для робототехники.
 
-**Статус:** Week 1 Complete ✅ - Data Pipeline реализован и протестирован (29/29 тестов)
+**Статус:** Week 2 Complete ✅ - Data Pipeline + Model (ResNet + FiLM) реализованы (55/55 тестов)
 
 ## О проекте
 
@@ -22,7 +22,10 @@ bc-z/
 ├── src/                          # Основной код реализации
 │   ├── data/
 │   │   └── dataset.py           # ✅ BCZDataset для TFRecord данных
-│   ├── models/                   # 🔜 Нейронные сети (ResNet + FiLM)
+│   ├── models/                   # ✅ ResNet + FiLM + BCZPolicy
+│   │   ├── film.py              # ✅ FiLMLayer (task conditioning)
+│   │   ├── backbone.py          # ✅ ResNetBackbone (resnet18/50)
+│   │   └── policy.py            # ✅ BCZPolicy
 │   ├── training/                 # 🔜 Training loop и trainer
 │   └── utils/
 │       └── metrics.py           # ✅ Метрики для оценки (13 тестов)
@@ -31,7 +34,8 @@ bc-z/
 │   │   ├── test_data.tfrecord   # Тестовые данные (5 сэмплов, 154 KB)
 │   │   └── create_test_data.py  # Скрипт для создания тестовых данных
 │   ├── test_dataset.py          # ✅ 29 тестов для BCZDataset
-│   └── test_metrics.py          # ✅ 13 тестов для метрик
+│   ├── test_metrics.py          # ✅ 13 тестов для метрик
+│   └── test_models.py           # ✅ 13 тестов для моделей
 ├── examples/
 │   └── dataloader.py            # ✅ Пример использования dataset
 ├── docs/
@@ -133,9 +137,10 @@ uv run pytest tests/test_dataset.py -v
 uv run pytest tests/test_metrics.py -v
 ```
 
-**Текущий статус:** 42/42 тестов проходит ✅
+**Текущий статус:** 55/55 тестов проходит ✅
 - Dataset: 29 тестов
 - Metrics: 13 тестов
+- Models: 13 тестов
 
 Тесты используют самодостаточные fixture данные в `tests/fixtures/` и не зависят от внешних больших датасетов.
 
@@ -204,11 +209,12 @@ def example_function(
 - [x] 42 unit теста (все проходят)
 - [x] Документация и примеры
 
-**Week 2: Model Implementation** 🔜 В ПЛАНАХ
-- [ ] ResNet18/50 backbone
-- [ ] FiLM layers для task conditioning
-- [ ] Multi-head prediction для actions
-- [ ] Model tests
+**Week 2: Model Implementation** ✅ ЗАВЕРШЕНО
+- [x] ResNet18/50 backbone (`src/models/backbone.py`)
+- [x] FiLM layers для task conditioning (`src/models/film.py`)
+- [x] BCZPolicy: stem → 4×(stage+FiLM) → GAP → concat(state) → MLP head
+- [x] Single MLP head (TODO: разделение на 3 головы)
+- [x] 13 model тестов (shape, affine-identity, gradient flow, batch independence)
 
 **Week 3: Training Loop** 🔜 В ПЛАНАХ
 - [ ] Trainer class

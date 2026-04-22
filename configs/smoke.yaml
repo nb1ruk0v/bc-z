@@ -1,0 +1,35 @@
+# Smoke-test config: runs training on the tiny fixture TFRecord (5 samples).
+# Purpose: verify wiring end-to-end — data → model → loss → trackio logs.
+
+seed: 0
+
+data:
+  train_path: tests/fixtures/test_data.tfrecord
+  val_path: tests/fixtures/test_data.tfrecord   # same file, just to exercise validate()
+  image_size: [100, 100]
+  num_waypoints: 10
+  max_train_samples: null
+  max_val_samples: null
+
+model:
+  backbone: resnet18
+  pretrained: false          # offline-friendly for smoke
+  embedding_dim: 512
+  state_dim: 7
+  hidden_dim: 256
+
+training:
+  batch_size: 2
+  num_workers: 0
+  num_epochs: 2
+  lr: 1.0e-3
+  embedding_noise_std: 0.1
+  device: cpu
+  loss_weights:
+    xyz: 100.0
+    axis_angle: 10.0
+    gripper: 0.5
+
+trackio:
+  project: bc-z-smoke
+  run_name: smoke-run

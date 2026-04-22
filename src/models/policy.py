@@ -11,12 +11,15 @@ class BCZPolicy(nn.Module):
     """
     Language/embedding-conditioned policy for BC-Z.
 
-    Architecture:
+    Architecture (per BC-Z paper §5.3):
         image -> ResNet stem
               -> [stage_i -> FiLM(sentence_embedding)] x 4
               -> global avg pool
               -> concat(pooled_features, robot_state)
-              -> MLP head -> (num_waypoints * 7) -> split into xyz/axis_angle/gripper
+              -> 3 independent MLP heads (each: Linear -> ReLU -> Linear -> ReLU -> Linear):
+                  - xyz_head        -> (num_waypoints, 3)
+                  - axis_angle_head -> (num_waypoints, 3)
+                  - gripper_head    -> (num_waypoints, 1)  (logits)
     """
 
     def __init__(
@@ -35,7 +38,7 @@ class BCZPolicy(nn.Module):
             embedding_dim: Task embedding dimensionality.
             state_dim: Robot state dimensionality (xyz=3, axis_angle=3, gripper=1 → 7).
             num_waypoints: Number of future waypoints to predict.
-            hidden_dim: Hidden size of the MLP head.
+            hidden_dim: Hidden size of each MLP head.
         """
         super().__init__()
         self.num_waypoints = num_waypoints
@@ -51,15 +54,23 @@ class BCZPolicy(nn.Module):
         )
 
         feature_dim = self.backbone.feature_channels[-1]
-        # TODO(week2-follow-up): split into 3 separate heads (xyz, axis_angle, gripper)
-        # — they have different output natures (regression vs. binary logits) and may
-        # benefit from independent capacity / loss weighting.
-        self.head = nn.Sequential(
-            nn.Linear(feature_dim + state_dim, hidden_dim),
+        in_dim = feature_dim + state_dim
+        self.xyz_head = self._make_head(in_dim, hidden_dim, num_waypoints * 3)
+        self.axis_angle_head = self._make_head(in_dim, hidden_dim, num_waypoints * 3)
+        self.gripper_head = self._make_head(in_dim, hidden_dim, num_waypoints * 1)
+
+    @staticmethod
+    def _make_head(
+        in_dim: int,
+        hidden_dim: int,
+        out_dim: int,
+    ) -> nn.Sequential:
+        return nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
             nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(inplace=True),
-            nn.Linear(hidden_dim, num_waypoints * 7),
+            nn.Linear(hidden_dim, out_dim),
         )
 
     def forward(
@@ -94,11 +105,14 @@ class BCZPolicy(nn.Module):
         pooled = x.mean(dim=(2, 3))
 
         joint = torch.cat([pooled, state], dim=-1)
-        out = self.head(joint)
-        out = out.view(-1, self.num_waypoints, 7)
+        batch = joint.shape[0]
+
+        xyz = self.xyz_head(joint).view(batch, self.num_waypoints, 3)
+        axis_angle = self.axis_angle_head(joint).view(batch, self.num_waypoints, 3)
+        gripper = self.gripper_head(joint).view(batch, self.num_waypoints, 1)
 
         return {
-            "future_xyz_residual": out[..., 0:3],
-            "future_axis_angle_residual": out[..., 3:6],
-            "future_target_close": out[..., 6:7],
+            "future_xyz_residual": xyz,
+            "future_axis_angle_residual": axis_angle,
+            "future_target_close": gripper,
         }
