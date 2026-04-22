@@ -16,6 +16,7 @@ dependencies = [
     "pyyaml>=6.0",
     "ipython>=9.8.0",
     "tensorflow>=2.20.0",
+    "trackio>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -23,7 +24,6 @@ dev = [
     "jupyter>=1.0.0",
     "pytest>=7.4.0",
     "ruff>=0.1.0",
-    "wandb>=0.15.0",
 ]
 
 [tool.ruff]

@@ -109,11 +109,11 @@ class Trainer:
             for batch in self.train_loader:
                 metrics = self.train_step(batch)
                 if self.log_fn is not None:
-                    self.log_fn({**metrics, "epoch": epoch, "step": self.global_step})
+                    self.log_fn({**metrics, "epoch": epoch, "global_step": self.global_step})
 
             val_metrics = self.validate()
             if val_metrics and self.log_fn is not None:
-                self.log_fn({**val_metrics, "epoch": epoch, "step": self.global_step})
+                self.log_fn({**val_metrics, "epoch": epoch, "global_step": self.global_step})
 
             if self.scheduler is not None:
                 self.scheduler.step()
