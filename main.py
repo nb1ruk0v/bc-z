@@ -16,6 +16,8 @@ import numpy as np
 import torch
 import trackio
 import yaml
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import CosineAnnealingLR, LRScheduler, StepLR
 from torch.utils.data import DataLoader, Subset
 
 from src.data.dataset import BCZDataset
@@ -59,6 +61,30 @@ def build_dataset(
     return ds
 
 
+def build_scheduler(
+    cfg: dict[str, Any],
+    optimizer: Optimizer,
+    num_epochs: int,
+) -> LRScheduler | None:
+    sched_cfg = cfg.get("scheduler")
+    if not sched_cfg:
+        return None
+    sched_type = sched_cfg["type"]
+    if sched_type == "cosine":
+        return CosineAnnealingLR(
+            optimizer,
+            T_max=num_epochs,
+            eta_min=sched_cfg.get("eta_min", 0.0),
+        )
+    if sched_type == "step":
+        return StepLR(
+            optimizer,
+            step_size=sched_cfg["step_size"],
+            gamma=sched_cfg.get("gamma", 0.1),
+        )
+    raise ValueError(f"unknown scheduler type: {sched_type}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/default.yaml")
@@ -98,6 +124,7 @@ def main() -> None:
     )
 
     optimizer = torch.optim.Adam(policy.parameters(), lr=cfg["training"]["lr"])
+    scheduler = build_scheduler(cfg, optimizer, cfg["training"]["num_epochs"])
 
     trackio.init(
         project=cfg["trackio"]["project"],
@@ -119,6 +146,7 @@ def main() -> None:
         train_loader=train_loader,
         val_loader=val_loader,
         optimizer=optimizer,
+        scheduler=scheduler,
         device=cfg["training"]["device"],
         loss_weights=cfg["training"]["loss_weights"],
         embedding_noise_std=cfg["training"]["embedding_noise_std"],

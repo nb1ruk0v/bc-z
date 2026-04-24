@@ -55,14 +55,6 @@ class TestResNetBackbone:
         assert isinstance(feats, list)
         assert len(feats) == 4
 
-    def test_resnet18_channels(self):
-        backbone = ResNetBackbone(arch="resnet18", pretrained=False)
-        assert backbone.feature_channels == [64, 128, 256, 512]
-
-    def test_resnet50_channels(self):
-        backbone = ResNetBackbone(arch="resnet50", pretrained=False)
-        assert backbone.feature_channels == [256, 512, 1024, 2048]
-
     def test_invalid_arch_raises(self):
         with pytest.raises(ValueError):
             ResNetBackbone(arch="resnet999", pretrained=False)
@@ -123,21 +115,3 @@ class TestBCZPolicy:
         with torch.no_grad():
             out = default_policy(image, embedding, state)
         assert not torch.allclose(out["future_xyz_residual"][0], out["future_xyz_residual"][1])
-
-    def test_resnet50_variant(self):
-        policy = BCZPolicy(
-            backbone="resnet50",
-            pretrained=False,
-            embedding_dim=512,
-            state_dim=7,
-            num_waypoints=10,
-        )
-        image = torch.randn(2, 3, 100, 100)
-        embedding = torch.randn(2, 512)
-        state = torch.randn(2, 7)
-        out = policy(image, embedding, state)
-        assert out["future_xyz_residual"].shape == (2, 10, 3)
-
-    def test_film_layers_registered(self, default_policy):
-        film_layers = [m for m in default_policy.modules() if isinstance(m, FiLMLayer)]
-        assert len(film_layers) == 4

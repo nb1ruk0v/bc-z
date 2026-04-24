@@ -31,6 +31,10 @@ training:
     axis_angle: 10.0
     gripper: 0.5
 
+scheduler:
+  type: cosine               # cosine | step; omit section or set null to disable
+  eta_min: 0.0
+
 trackio:
   project: bc-z
   run_name: null             # null = trackio auto-name
