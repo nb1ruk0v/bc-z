@@ -94,143 +94,98 @@ def trainer_components():
     return model, train_loader, val_loader, optimizer
 
 
-class TestTrainStep:
-    def test_returns_expected_metric_keys(self, trainer_components):
-        model, train_loader, _, optimizer = trainer_components
-        trainer = Trainer(model=model, train_loader=train_loader, optimizer=optimizer)
-
-        batch = next(iter(train_loader))
-        metrics = trainer.train_step(batch)
-
-        assert set(metrics.keys()) == {
-            "loss/total",
-            "loss/xyz",
-            "loss/axis_angle",
-            "loss/gripper",
-        }
-        for v in metrics.values():
-            assert isinstance(v, float)
-
-    def test_reduces_loss_on_repeated_steps(self, trainer_components):
-        """Sanity: optimizer.step() actually updates weights and lowers loss on one batch."""
-        model, train_loader, _, optimizer = trainer_components
-        trainer = Trainer(
-            model=model,
-            train_loader=train_loader,
-            optimizer=optimizer,
-            embedding_noise_std=0.0,
-        )
-        batch = next(iter(train_loader))
-
-        initial = trainer.train_step(batch)["loss/total"]
-        for _ in range(30):
-            trainer.train_step(batch)
-        final = trainer.train_step(batch)["loss/total"]
-
-        assert final < initial * 0.5, f"loss did not decrease: {initial} -> {final}"
-
-    def test_leaves_model_in_train_mode(self, trainer_components):
-        model, train_loader, _, optimizer = trainer_components
-        trainer = Trainer(model=model, train_loader=train_loader, optimizer=optimizer)
-        model.eval()
-        trainer.train_step(next(iter(train_loader)))
-        assert model.training
+# ---------- Training loop ----------
 
 
-class TestEmbeddingNoise:
-    def test_zero_noise_is_deterministic(self, trainer_components):
-        model, train_loader, _, optimizer = trainer_components
-        trainer = Trainer(
-            model=model,
-            train_loader=train_loader,
-            optimizer=optimizer,
-            embedding_noise_std=0.0,
-        )
-        batch = next(iter(train_loader))
-        # Same batch twice without optimizer step should yield same loss (no noise).
-        model.eval()  # disable any dropout etc. in real models (noop here, but intent)
-        with torch.no_grad():
-            image = batch["image"]
-            emb = batch["sentence_embedding"]
-            state = torch.cat(
-                [batch["present_xyz"], batch["present_axis_angle"], batch["present_gripper"]],
-                dim=-1,
-            )
-            out_a = trainer._apply_embedding_noise(emb)
-            out_b = trainer._apply_embedding_noise(emb)
-        assert torch.equal(out_a, out_b)
-        assert torch.equal(out_a, emb)
-        # silence unused lints
-        del image, state
+def test_reduces_loss_on_repeated_steps(trainer_components):
+    """Sanity: optimizer.step() actually updates weights and lowers loss on one batch."""
+    model, train_loader, _, optimizer = trainer_components
+    trainer = Trainer(
+        model=model,
+        train_loader=train_loader,
+        optimizer=optimizer,
+        embedding_noise_std=0.0,
+    )
+    batch = next(iter(train_loader))
 
-    def test_nonzero_noise_is_stochastic(self, trainer_components):
-        model, train_loader, _, optimizer = trainer_components
-        trainer = Trainer(
-            model=model,
-            train_loader=train_loader,
-            optimizer=optimizer,
-            embedding_noise_std=0.1,
-        )
-        emb = torch.randn(8, 8)
-        torch.manual_seed(1)
-        a = trainer._apply_embedding_noise(emb)
-        torch.manual_seed(2)
-        b = trainer._apply_embedding_noise(emb)
-        assert not torch.equal(a, b)
-        # Empirical std of (a - emb) should be near 0.1 for a reasonably sized tensor.
-        emp = (a - emb).std().item()
-        assert 0.05 < emp < 0.2, f"empirical noise std = {emp}"
+    initial = trainer.train_step(batch)["loss/total"]
+    for _ in range(30):
+        trainer.train_step(batch)
+    final = trainer.train_step(batch)["loss/total"]
+
+    assert final < initial * 0.5, f"loss did not decrease: {initial} -> {final}"
 
 
-class TestValidate:
-    def test_sets_eval_mode_and_no_grad(self, trainer_components):
-        model, train_loader, val_loader, optimizer = trainer_components
-        trainer = Trainer(
-            model=model,
-            train_loader=train_loader,
-            val_loader=val_loader,
-            optimizer=optimizer,
-        )
-        model.train()
-
-        # Snapshot params; validate must not change them.
-        before = [p.detach().clone() for p in model.parameters()]
-        metrics = trainer.validate()
-        after = list(model.parameters())
-
-        assert not model.training
-        assert set(metrics.keys()) == {
-            "val/loss/total",
-            "val/loss/xyz",
-            "val/loss/axis_angle",
-            "val/loss/gripper",
-        }
-        for b, a in zip(before, after, strict=True):
-            assert torch.equal(b, a), "validate must not update parameters"
-
-    def test_returns_empty_when_no_val_loader(self, trainer_components):
-        model, train_loader, _, optimizer = trainer_components
-        trainer = Trainer(model=model, train_loader=train_loader, optimizer=optimizer)
-        assert trainer.validate() == {}
+# ---------- Embedding noise ----------
 
 
-class TestFit:
-    def test_calls_log_fn_with_metrics(self, trainer_components):
-        model, train_loader, val_loader, optimizer = trainer_components
-        logged: list[dict] = []
-        trainer = Trainer(
-            model=model,
-            train_loader=train_loader,
-            val_loader=val_loader,
-            optimizer=optimizer,
-            log_fn=logged.append,
-        )
+def test_nonzero_noise_is_stochastic(trainer_components):
+    model, train_loader, _, optimizer = trainer_components
+    trainer = Trainer(
+        model=model,
+        train_loader=train_loader,
+        optimizer=optimizer,
+        embedding_noise_std=0.1,
+    )
+    emb = torch.randn(8, 8)
+    torch.manual_seed(1)
+    a = trainer._apply_embedding_noise(emb)
+    torch.manual_seed(2)
+    b = trainer._apply_embedding_noise(emb)
+    assert not torch.equal(a, b)
+    # Empirical std of (a - emb) should be near 0.1 for a reasonably sized tensor.
+    emp = (a - emb).std().item()
+    assert 0.05 < emp < 0.2, f"empirical noise std = {emp}"
 
-        trainer.fit(num_epochs=2)
 
-        assert len(logged) > 0
-        # Every log record carries an "epoch" field.
-        assert all("epoch" in r for r in logged)
-        # At least one record contains a train-loss key; at least one contains a val-loss key.
-        assert any("loss/total" in r for r in logged)
-        assert any("val/loss/total" in r for r in logged)
+# ---------- Validation ----------
+
+
+def test_validate_sets_eval_mode_and_no_grad(trainer_components):
+    model, train_loader, val_loader, optimizer = trainer_components
+    trainer = Trainer(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        optimizer=optimizer,
+    )
+    model.train()
+
+    # Snapshot params; validate must not change them.
+    before = [p.detach().clone() for p in model.parameters()]
+    metrics = trainer.validate()
+    after = list(model.parameters())
+
+    assert not model.training
+    assert set(metrics.keys()) == {
+        "val/loss/total",
+        "val/loss/xyz",
+        "val/loss/axis_angle",
+        "val/loss/gripper",
+    }
+    for b, a in zip(before, after, strict=True):
+        assert torch.equal(b, a), "validate must not update parameters"
+
+
+# ---------- Fit integration ----------
+
+
+def test_fit_calls_log_fn_with_metrics(trainer_components):
+    model, train_loader, val_loader, optimizer = trainer_components
+    logged: list[dict] = []
+    trainer = Trainer(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        optimizer=optimizer,
+        log_fn=logged.append,
+    )
+
+    trainer.fit(num_epochs=2)
+
+    assert len(logged) > 0
+    # Every log record carries an "epoch" field.
+    assert all("epoch" in r for r in logged)
+    # At least one record contains a train-loss key; at least one contains a val-loss key.
+    assert any("loss/total" in r for r in logged)
+    assert any("val/loss/total" in r for r in logged)

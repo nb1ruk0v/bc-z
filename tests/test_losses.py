@@ -61,32 +61,22 @@ class TestBCZLoss:
         for k in comp_a:
             assert torch.allclose(comp_a[k], comp_b[k], atol=1e-6)
 
-    def test_xyz_uses_huber_delta_1(self):
-        """xyz component equals F.smooth_l1_loss (Huber with delta=1.0, beta=1.0)."""
+    @pytest.mark.parametrize(
+        "key,comp_name",
+        [
+            ("future_xyz_residual", "xyz"),
+            ("future_axis_angle_residual", "axis_angle"),
+        ],
+    )
+    def test_regression_head_uses_huber_delta_1(self, key, comp_name):
+        """Regression components equal F.smooth_l1_loss (Huber with delta=1.0, beta=1.0)."""
         pred, tgt = _make_batch()
         _, comp = compute_bcz_loss(
             pred, tgt, weights={"xyz": 1.0, "axis_angle": 1.0, "gripper": 1.0}
         )
 
-        expected = F.smooth_l1_loss(
-            pred["future_xyz_residual"],
-            tgt["future_xyz_residual"],
-            beta=1.0,
-        )
-        assert torch.allclose(comp["xyz"], expected, atol=1e-6)
-
-    def test_axis_angle_uses_huber_delta_1(self):
-        pred, tgt = _make_batch()
-        _, comp = compute_bcz_loss(
-            pred, tgt, weights={"xyz": 1.0, "axis_angle": 1.0, "gripper": 1.0}
-        )
-
-        expected = F.smooth_l1_loss(
-            pred["future_axis_angle_residual"],
-            tgt["future_axis_angle_residual"],
-            beta=1.0,
-        )
-        assert torch.allclose(comp["axis_angle"], expected, atol=1e-6)
+        expected = F.smooth_l1_loss(pred[key], tgt[key], beta=1.0)
+        assert torch.allclose(comp[comp_name], expected, atol=1e-6)
 
     def test_gripper_uses_bce_with_logits(self):
         """Zero logit + target=0.5 → BCE = ln(2); confirms logit interpretation."""
